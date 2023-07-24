@@ -1,0 +1,9 @@
+# data 폴더 무시
+data/
+*.zip
+
+# __pycache__ 폴더 무시
+__pycache__/
+
+# .ipynb 파일 무시
+*.ipynb
