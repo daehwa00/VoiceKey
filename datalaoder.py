@@ -29,7 +29,7 @@ class EcdcDataset(Dataset):
             for file in files:
                 if file.endswith(".json"):
                     json_file = os.path.join(root, file)
-                    with open(json_file, "r") as f:
+                    with open(json_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                         speaker_name = data["Speaker"]["SpeakerName"]
                         if speaker_name not in speaker_dict:
@@ -98,6 +98,7 @@ class EcdcDataset(Dataset):
 def collate_fn(
     batch: tp.List[tp.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
 ) -> tp.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Unzip the batch
     audio1s, audio2s, labels = zip(*batch)
     # Pad the sequences to the max length
@@ -116,9 +117,9 @@ def collate_fn(
         seq = seq[:, :, :600]  # Ensure the sequence is exactly the desired length
         sequences_padded2.append(seq)
     return (
-        torch.stack(sequences_padded1),
-        torch.stack(sequences_padded2),
-        torch.tensor(labels),
+        torch.stack(sequences_padded1).to(device),
+        torch.stack(sequences_padded2).to(device),
+        torch.tensor(labels).to(device),
     )
 
 

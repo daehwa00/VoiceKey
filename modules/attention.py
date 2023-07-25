@@ -1,37 +1,26 @@
 import torch
 from torch import nn
 import math
-
-
-class DepthwiseConv1d(nn.Conv1d):
-    def __init__(self, in_channels, kernel_size, stride=1, padding=0, dilation=1):
-        super().__init__(
-            in_channels,
-            in_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups=in_channels,
-        )
+from typing import Tuple
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, dim, num_heads):
+    def __init__(self, dim: int, num_heads: int):
         super(MultiHeadAttention, self).__init__()
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
 
-        self.query_layer = DepthwiseConv1d(dim, kernel_size=1)
-        self.key_layer = DepthwiseConv1d(dim, kernel_size=1)
-        self.value_layer = DepthwiseConv1d(dim, kernel_size=1)
+        self.query_layer = nn.Conv1d(dim, dim, kernel_size=1)
+        self.key_layer = nn.Conv1d(dim, dim, kernel_size=1)
+        self.value_layer = nn.Conv1d(dim, dim, kernel_size=1)
 
-        self.fc_out = nn.Linear(dim, dim)
+        self.fc = nn.Linear(dim, dim)
 
-        self.norm = nn.LayerNorm(dim)
+        self.norm1 = nn.LayerNorm(dim)  # LayerNorm after attention
+        self.norm2 = nn.LayerNorm(dim)  # LayerNorm after FC
 
-    def forward(self, query, key_value):
+    def forward(self, query: torch.Tensor, key_value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = query.shape[0]
 
         query = self.query_layer(query.permute(0, 2, 1)).permute(0, 2, 1)
@@ -53,28 +42,27 @@ class MultiHeadAttention(nn.Module):
         context_vector = torch.matmul(attention_weights, value).permute(0, 2, 1, 3)
 
         context_vector = context_vector.contiguous().view(batch_size, -1, self.dim)
-        context_vector = self.fc_out(context_vector)
+        context_vector = self.norm1(context_vector + query)
 
-        context_vector = self.norm(context_vector)
+        context_vector = self.fc(context_vector)
+
+        context_vector = self.norm2(context_vector + query)
 
         return context_vector, attention_weights
 
 
 class AttentionModel(nn.Module):
-    def __init__(self, d_model, nhead, dropout=0.1):
+    def __init__(self, d_model: int, nhead: int, dropout: float = 0.1):
         super(AttentionModel, self).__init__()
         # Multi-head attention module
         self.multihead_attn = MultiHeadAttention(d_model, nhead)
         # Dropout layer
         self.dropout = nn.Dropout(dropout)
-        # Layer normalization
-        self.norm = nn.LayerNorm(d_model)
 
-    def forward(self, query, key):
+    def forward(self, query: torch.Tensor, key: torch.Tensor) -> torch.Tensor:
         # Compute self-attention
-        attn_output, _ = self.multihead_attn(query, key, key)
+        attn_output, _ = self.multihead_attn(query, key)
         # Apply dropout
-        attn_output = self.dropout(attn_output)
-        # Add residual connection and apply layer normalization
-        output = self.norm(attn_output + query)
+        output = self.dropout(attn_output)
+
         return output

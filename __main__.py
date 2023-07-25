@@ -1,17 +1,16 @@
 import argparse
+
 from datalaoder import EcdcDataLoader
-from model import EVACModel
+from model import VoiceKeyModel
 from torch import optim, nn
 
 import torch
 
 from tqdm import tqdm
-import os
-from pathlib import Path
 
 
 def get_parser():
-    parser = argparse.ArgumentParser("EVAC", description="daehwa's EVAC model")
+    parser = argparse.ArgumentParser("VoiceKey", description="VoiceKey model")
     parser.add_argument(
         "--source_dir",
         type=str,
@@ -28,11 +27,11 @@ def get_parser():
         "--batch_size",
         type=int,
         help="Batch size",
-        default=512,
+        default=256,
     )
     parser.add_argument("--epochs", type=int, help="Number of epochs", default=100)
     parser.add_argument("--print_every", type=int, help="Print frequency", default=2)
-    parser.add_argument("--num_workers", type=int, help="num_workers", default=8)
+    parser.add_argument("--num_workers", type=int, help="num_workers", default=16)
 
     return parser
 
@@ -43,10 +42,10 @@ def main():
     print_every = args.print_every
     loader = EcdcDataLoader(args.source_dir, args.label_dir, batch_size=batch_size)
 
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.CrossEntropyLoss()
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = EVACModel().to(device)
+    model = VoiceKeyModel().to(device)
     optimizer = optim.Adam(model.parameters())
     for epoch in range(args.epochs):
         running_loss = 0.0
@@ -57,30 +56,22 @@ def main():
             # Move the audios and the labels to the GPU if available
             audios1 = audios1.float().squeeze(1).to(device)
             audios2 = audios2.float().squeeze(1).to(device)
+            print(audios1.shape)
             labels = labels.to(device)
 
             # Zero the parameter gradients
             optimizer.zero_grad()
 
-            # Forward pass 일자로 펴주기
-            outputs1 = model(audios1).view(audios1.size(0), -1)
-            outputs2 = model(audios2).view(audios2.size(0), -1)
-
-            # outputs_shape = [batch_size, 128]
-            # cosine similarity
-            outputs = torch.cosine_similarity(outputs1, outputs2, dim=-1)
-
-            # 0 ~ 1 사이로 normalize
-            outputs = torch.sigmoid(outputs)
+            outputs = model(audios1, audios2)  # shape [batch_size, 2]
 
             # predictions(according to threshold)
-            predictions = torch.where(outputs > 0.5, 1, 0)
+            predictions = torch.argmax(outputs, dim=-1)
 
             # Compute the accuracy
             accuracy = (predictions == labels).float().mean().item()
 
             # Compute the loss
-            loss = criterion(outputs, labels.float())
+            loss = criterion(outputs, labels)
             # Backward pass
             loss.backward()
             # Optimize

@@ -1,12 +1,36 @@
-from modules import conv as m
+from modules import MultiHeadAttention, Conv1DNet
 import torch
 from torch import nn
+from typing import Type
 
 
-class EVACModel(nn.Module):
-    def __init__(self, cnn: m.Conv1DNet = m.Conv1DNet()):
+class VoiceKeyModel(nn.Module):
+    def __init__(
+        self,
+        cnn: Type[Conv1DNet] = Conv1DNet,
+        attention: Type[MultiHeadAttention] = MultiHeadAttention,
+        num_layers: int = 1,
+        dropout: float = 0.5,
+    ):
         super().__init__()
-        self.cnn = cnn
+        self.cnn = cnn()
+        self.attention_layers = nn.ModuleList(
+            [
+                attention(self.cnn.out_features, self.cnn.out_features)
+                for _ in range(num_layers)
+            ]
+        )
+        self.fc = nn.Linear(
+            self.cnn.out_features, 2
+        )  # 2 classes: same voice or different voice (this setting can use cross entropy loss)
+        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
-        return self.cnn(x)
+    def forward(self, audio1: torch.Tensor, audio2: torch.Tensor) -> torch.Tensor:
+        cnn_out1 = self.cnn(audio1)
+        cnn_out2 = self.cnn(audio2)
+        attention_out = cnn_out1
+        for attention in self.attention_layers:
+            attention_out, _ = attention(attention_out, cnn_out2)
+            attention_out = self.dropout(attention_out)
+        out = self.fc(attention_out)
+        return out
