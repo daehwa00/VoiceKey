@@ -56,7 +56,6 @@ def main():
             # Move the audios and the labels to the GPU if available
             audios1 = audios1.float().squeeze(1).to(device)
             audios2 = audios2.float().squeeze(1).to(device)
-            print(audios1.shape)
             labels = labels.to(device)
 
             # Zero the parameter gradients

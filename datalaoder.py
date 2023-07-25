@@ -117,9 +117,9 @@ def collate_fn(
         seq = seq[:, :, :600]  # Ensure the sequence is exactly the desired length
         sequences_padded2.append(seq)
     return (
-        torch.stack(sequences_padded1).to(device),
-        torch.stack(sequences_padded2).to(device),
-        torch.tensor(labels).to(device),
+        torch.stack(sequences_padded1),
+        torch.stack(sequences_padded2),
+        torch.tensor(labels),
     )
 
 
