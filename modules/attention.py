@@ -5,11 +5,12 @@ from typing import Tuple
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int):
+    def __init__(self, dim: int, num_heads: int = 4):
         super(MultiHeadAttention, self).__init__()
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
+        self.seq_length = 600
 
         self.query_layer = nn.Conv1d(dim, dim, kernel_size=1)
         self.key_layer = nn.Conv1d(dim, dim, kernel_size=1)
@@ -20,33 +21,45 @@ class MultiHeadAttention(nn.Module):
         self.norm1 = nn.LayerNorm(dim)  # LayerNorm after attention
         self.norm2 = nn.LayerNorm(dim)  # LayerNorm after FC
 
-    def forward(self, query: torch.Tensor, key_value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, query: torch.Tensor, key_value: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = query.shape[0]
 
-        query = self.query_layer(query.permute(0, 2, 1)).permute(0, 2, 1)
-        key = self.key_layer(key_value.permute(0, 2, 1)).permute(0, 2, 1)
-        value = self.value_layer(key_value.permute(0, 2, 1)).permute(0, 2, 1)
+        query = self.query_layer(query)  # [batch_size, 64, seq_length]
+        key = self.key_layer(key_value)  # [batch_size, 64, seq_length]
+        value = self.value_layer(key_value)  # [batch_size, 64, seq_length]
 
-        query = query.view(batch_size, -1, self.num_heads, self.head_dim).permute(
+        query = query.view(
+            batch_size, self.seq_length, self.num_heads, self.head_dim
+        ).permute(0, 2, 1, 3)
+        key = key.view(
+            batch_size, self.seq_length, self.num_heads, self.head_dim
+        ).permute(0, 2, 1, 3)
+        value = value.view(
+            batch_size, self.seq_length, self.num_heads, self.head_dim
+        ).permute(
             0, 2, 1, 3
-        )
-        key = key.view(batch_size, -1, self.num_heads, self.head_dim).permute(
-            0, 2, 1, 3
-        )
-        value = value.view(batch_size, -1, self.num_heads, self.head_dim).permute(
-            0, 2, 1, 3
-        )
+        )  # [batch_size, num_heads, seq_length, head_dim]
 
-        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(
+            self.head_dim
+        )  # [batch_size, num_heads, seq_length, seq_length]
+
         attention_weights = torch.softmax(scores, dim=-1)
-        context_vector = torch.matmul(attention_weights, value).permute(0, 2, 1, 3)
+        context_vector = torch.matmul(attention_weights, value).permute(
+            0, 2, 1, 3
+        )  # [batch_size, seq_length, num_heads, head_dim]
 
-        context_vector = context_vector.contiguous().view(batch_size, -1, self.dim)
+        context_vector = context_vector.contiguous().view(
+            batch_size, -1, self.dim
+        )  # [batch_size, seq_length, dim]
+
+        query = query.permute(0, 2, 1, 3).contiguous().view(batch_size, -1, self.dim)
         context_vector = self.norm1(context_vector + query)
+        context_vector_fc = self.fc(context_vector)
 
-        context_vector = self.fc(context_vector)
-
-        context_vector = self.norm2(context_vector + query)
+        context_vector = self.norm2(context_vector + context_vector_fc)
 
         return context_vector, attention_weights
 

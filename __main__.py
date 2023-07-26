@@ -31,7 +31,7 @@ def get_parser():
     )
     parser.add_argument("--epochs", type=int, help="Number of epochs", default=100)
     parser.add_argument("--print_every", type=int, help="Print frequency", default=2)
-    parser.add_argument("--num_workers", type=int, help="num_workers", default=16)
+    parser.add_argument("--num_workers", type=int, help="num_workers", default=24)
 
     return parser
 
@@ -47,6 +47,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = VoiceKeyModel().to(device)
     optimizer = optim.Adam(model.parameters())
+
     for epoch in range(args.epochs):
         running_loss = 0.0
         progress_bar = tqdm(enumerate(loader), total=len(loader))

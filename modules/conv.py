@@ -3,9 +3,9 @@ import torch.nn as nn
 
 
 class Conv1DNet(nn.Module):
-    def __init__(self, stride: int = 3):
+    def __init__(self, stride: int = 3, out_features: int = 64):
         super(Conv1DNet, self).__init__()
-        self.out_features = 64
+        self.out_features = out_features
         self.conv1 = nn.Conv1d(
             1, self.out_features // 4, kernel_size=25, stride=1, padding=12, dilation=1
         )
@@ -44,4 +44,4 @@ class Conv1DNet(nn.Module):
 
         out = torch.cat([out1_, out2_, out3], dim=2)
         out = out[:, :, ::3]  # Downsample to time_seq / 3 * 3
-        return out
+        return out  # [batch_size, out_features, time_seq / 3 * 3]

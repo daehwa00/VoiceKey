@@ -88,39 +88,7 @@ class EcdcDataset(Dataset):
             )
         audio2 = torch.load(audio_file2).float() / 1024
 
-        if self.transform:
-            audio1 = self.transform(audio1)
-            audio2 = self.transform(audio2)
-
         return audio1, audio2, torch.tensor(int(same_speaker))
-
-
-def collate_fn(
-    batch: tp.List[tp.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
-) -> tp.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # Unzip the batch
-    audio1s, audio2s, labels = zip(*batch)
-    # Pad the sequences to the max length
-    sequences_padded1 = []
-    sequences_padded2 = []
-    for seq in audio1s:
-        while seq.size(2) < 600:
-            pad_size = min(seq.size(2) - 1, 600 - seq.size(2))
-            seq = F.pad(seq.float(), (0, pad_size), mode="reflect")
-        seq = seq[:, :, :600]  # Ensure the sequence is exactly the desired length
-        sequences_padded1.append(seq)
-    for seq in audio2s:
-        while seq.size(2) < 600:
-            pad_size = min(seq.size(2) - 1, 600 - seq.size(2))
-            seq = F.pad(seq.float(), (0, pad_size), mode="reflect")
-        seq = seq[:, :, :600]  # Ensure the sequence is exactly the desired length
-        sequences_padded2.append(seq)
-    return (
-        torch.stack(sequences_padded1),
-        torch.stack(sequences_padded2),
-        torch.tensor(labels),
-    )
 
 
 class EcdcDataLoader(DataLoader):
@@ -132,7 +100,6 @@ class EcdcDataLoader(DataLoader):
         shuffle: bool = True,
         num_workers: int = 24,
         pin_memory: bool = True,
-        collate_fn: tp.Callable = collate_fn,
     ):
         self.dataset = EcdcDataset(source_dir, label_dir)
         super().__init__(
@@ -141,7 +108,6 @@ class EcdcDataLoader(DataLoader):
             shuffle=shuffle,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            collate_fn=collate_fn,
         )
 
     def __iter__(self) -> tp.Iterator:
