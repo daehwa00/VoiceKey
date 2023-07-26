@@ -1,5 +1,6 @@
 # data 폴더 무시
 data/
+saved_models/
 *.zip
 
 # __pycache__ 폴더 무시
