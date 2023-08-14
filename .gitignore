@@ -1,6 +1,8 @@
 # data 폴더 무시
 data/
 saved_models/
+saved_data/
+wandb/
 *.zip
 
 # __pycache__ 폴더 무시

@@ -32,7 +32,6 @@ To use VoiceKey, follow these steps:
 
 ## Contributing
 
-
 ## Contact
 
 If you have any questions or feedback, please feel free to [contact me](daehwa001210@gmail.com)
