@@ -30,7 +30,7 @@ def save_model(model, optimizer, epoch, save_dir, model_name, current_time):
     Save the model to the path directory provided
     """
     # Create a new directory path with the current time
-    save_dir = os.path.join(save_dir, "saved_models", current_time)
+    save_dir = os.path.join(save_dir, current_time)
 
     save_path = os.path.join(save_dir, model_name + "_epoch_" + str(epoch) + ".pt")
     if not os.path.exists(save_dir):
