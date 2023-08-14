@@ -43,5 +43,5 @@ class Conv1DNet(nn.Module):
         out3 = self.relu(out3)
 
         out = torch.cat([out1_, out2_, out3], dim=2)
-        out = out[:, :, ::3]  # Downsample to time_seq / 3 * 3
-        return out  # [batch_size, out_features, time_seq / 3 * 3]
+        out = out[:, :, ::20]  # Downsample to time_seq / 20 * 3
+        return out  # [batch_size, out_features, time_seq / 20 * 3]
