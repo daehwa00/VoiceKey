@@ -28,7 +28,7 @@ class ChunkedConvolution(nn.Module):
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, padding=padding)
         self.bn = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.3)
         self.swish = Swish()
 
     def forward(self, chunks):

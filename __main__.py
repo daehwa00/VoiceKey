@@ -38,7 +38,7 @@ def train_model(model, train_loader, test_loader, device, args=None):
         optimizer, step_size=args.lr_decay_step, gamma=args.lr_decay_gamma
     )
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    margin = 0.5
+    margin = 1.5
 
     for epoch in range(args.epochs):
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader))
@@ -74,7 +74,7 @@ def train_model(model, train_loader, test_loader, device, args=None):
 
             optimizer.step()
 
-            if i % 2 == 0:
+            if i % 4 == 0:
                 wandb.log({"loss": loss.item(), "accuracy": accuracy})
 
         save_model(model, optimizer, epoch, "saved_models", "voicekey", current_time)

@@ -19,13 +19,13 @@ def get_parser():
         "--batch_size",
         type=int,
         help="Batch size",
-        default=4096,
+        default=2048,
     )
     parser.add_argument("--epochs", type=int, help="Number of epochs", default=100)
     parser.add_argument("--print_every", type=int, help="Print frequency", default=2)
     parser.add_argument("--num_workers", type=int, help="num_workers", default=24)
     parser.add_argument(
-        "--lr_decay_step", type=int, help="Learning rate decay step", default=100
+        "--lr_decay_step", type=int, help="Learning rate decay step", default=20
     )
     parser.add_argument(
         "--lr_decay_gamma", type=float, help="Learning rate decay factor", default=0.5
@@ -33,6 +33,6 @@ def get_parser():
     parser.add_argument(
         "--learning_rate", type=float, help="Learning rate", default=2e-3
     )
-    parser.add_argument("--dim", type=int, help="feature vector dimension", default=64)
+    parser.add_argument("--dim", type=int, help="feature vector dimension", default=128)
 
     return parser
