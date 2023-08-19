@@ -6,18 +6,39 @@ from datetime import datetime
 
 from dataloader import PreprocessedEcdcDataLoader
 from model import VoiceKeyModel
-from utils import set_seed, save_model, load_model, evaluate_model
+from utils import set_seed, save_model, evaluate_model
 from config import get_parser
 
 
+def contrastive_loss(embeddings1, embeddings2, labels, margin=1.0):
+    """
+    Compute the contrastive loss.
+
+    Parameters:
+    - embeddings1, embeddings2: the two sets of embeddings to compare.
+    - labels: labels indicating if the pair is similar (1) or dissimilar (0).
+    - margin: the margin for dissimilar pairs.
+
+    Returns:
+    - loss value
+    """
+    distances = torch.norm(embeddings1 - embeddings2, dim=1)  # Euclidean distances
+    similar_loss = labels * distances**2  # For similar pairs
+    dissimilar_loss = (1 - labels) * torch.relu(
+        margin - distances
+    ) ** 2  # For dissimilar pairs
+
+    return 0.5 * (similar_loss + dissimilar_loss).mean()
+
+
 def train_model(model, train_loader, test_loader, device, args=None):
-    criterion = nn.CrossEntropyLoss()
     model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
     scheduler = optim.lr_scheduler.StepLR(
         optimizer, step_size=args.lr_decay_step, gamma=args.lr_decay_gamma
     )
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    margin = 0.5
 
     for epoch in range(args.epochs):
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader))
@@ -32,20 +53,29 @@ def train_model(model, train_loader, test_loader, device, args=None):
 
             optimizer.zero_grad()
 
-            outputs = model(audios1, audios2)
-            normlized_outputs = (outputs + 1) / 2
+            embeddings1, embeddings2 = model(audios1, audios2)  # -1 ~ 1
+            # normlized_outputs = (outputs + 1) / 2  # 0 ~ 1
 
-            loss = torch.mean((normlized_outputs - labels.float()) ** 2)
-
+            # loss = torch.mean((normlized_outputs - labels.float()) ** 2)
+            # loss = criterion(outputs, labels.float())
+            loss = contrastive_loss(embeddings1, embeddings2, labels, margin)
+            distances = torch.norm(embeddings1 - embeddings2, dim=1)
+            predicts = torch.where(
+                distances < margin / 2,
+                torch.tensor(1.0, device=device),
+                torch.tensor(0.0, device=device),
+            )
+            accuracy = (predicts == labels).float().mean().item()
             # Compute the accuracy
-            predict = torch.where(normlized_outputs > 0.5, 1, 0)
-            accuracy = torch.sum(predict == labels).item() / len(labels)
+            # predict = torch.where(normlized_outputs > 0.5, 1, 0)
+            # accuracy = torch.sum(predict == labels).item() / len(labels)
 
             loss.backward()
 
             optimizer.step()
 
-            wandb.log({"loss": loss.item(), "accuracy": accuracy})
+            if i % 2 == 0:
+                wandb.log({"loss": loss.item(), "accuracy": accuracy})
 
         save_model(model, optimizer, epoch, "saved_models", "voicekey", current_time)
         scheduler.step()
@@ -57,7 +87,7 @@ def train_model(model, train_loader, test_loader, device, args=None):
     # Evaluation
     model.eval()
     eval_loss, eval_accuracy = evaluate_model(
-        model=model, test_loader=test_loader, device=device, criterion=criterion
+        model=model, test_loader=test_loader, device=device
     )
     print(
         "Epoch: {:02d} Eval Loss: {:.3f} Eval Acc: {:.3f}".format(

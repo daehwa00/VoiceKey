@@ -4,6 +4,37 @@ from typing import Type
 import torch.nn.functional as F
 
 
+def custom_chunking(tensor, chunk_size, step):
+    chunks = []
+    start = 0
+
+    for _ in range(22):
+        chunks.append(tensor[:, :, start : start + chunk_size])
+        start += step
+    return chunks
+
+
+class Swish(nn.Module):
+    def __init__(self):
+        super(Swish, self).__init__()
+
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+
+class ChunkedConvolution(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0):
+        super(ChunkedConvolution, self).__init__()
+        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, padding=padding)
+        self.bn = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(0.5)
+        self.swish = Swish()
+
+    def forward(self, chunks):
+        return [self.dropout(self.swish(self.bn(self.conv(chunk)))) for chunk in chunks]
+
+
 class SelfAttention(nn.Module):
     def __init__(self, embed_size):
         super(SelfAttention, self).__init__()
@@ -40,33 +71,32 @@ class VoiceKeyModel(nn.Module):
     def __init__(self, dim: int = 64, num_heads: int = 8):
         super(VoiceKeyModel, self).__init__()
 
-        # Define 1D convolutional layers for feature extraction
-        self.conv_layers = nn.Sequential(
-            nn.Conv1d(1, dim // 4, kernel_size=25, padding=12),
-            nn.BatchNorm1d(dim // 4),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Conv1d(dim // 4, dim // 2, kernel_size=25, padding=12),
-            nn.BatchNorm1d(dim // 2),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Conv1d(dim // 2, dim, kernel_size=25, padding=12),
-            nn.BatchNorm1d(dim),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-        )
+        self.conv1 = ChunkedConvolution(1, dim // 4, kernel_size=26)
+        self.conv2 = ChunkedConvolution(dim // 4, dim // 2, kernel_size=26)
+        self.conv3 = ChunkedConvolution(dim // 2, dim, kernel_size=25)
+
         self.attention = MultiHeadAttention(dim, num_heads)
-        # self.attention = SelfAttention(dim)  # Adjusted the dimension
         self.fc = nn.Linear(dim, dim)
 
     def forward(
         self, audio_vec1: torch.Tensor, audio_vec2: torch.Tensor
     ) -> torch.Tensor:
+        chunks1 = custom_chunking(audio_vec1, 75, 25)
+        chunks2 = custom_chunking(audio_vec2, 75, 25)
+
         # Extract features using convolutional layers
-        feature1 = self.conv_layers(audio_vec1).transpose(1, 2)[:, ::15, :]
-        feature2 = self.conv_layers(audio_vec2).transpose(1, 2)[
-            :, ::15, :
-        ]  # (batch_size, seq_length, feature_dim)
+        chunks1 = self.conv1(chunks1)
+        chunks2 = self.conv1(chunks2)
+
+        chunks1 = self.conv2(chunks1)
+        chunks2 = self.conv2(chunks2)
+
+        chunks1 = self.conv3(chunks1)
+        chunks2 = self.conv3(chunks2)
+
+        # Concatenate the chunks
+        feature1 = torch.cat(chunks1, dim=2).transpose(1, 2)
+        feature2 = torch.cat(chunks2, dim=2).transpose(1, 2)
 
         # Apply attention mechanism
         feature1 = self.attention(feature1)  # (batch_size, seq_length, feature_dim)
@@ -80,64 +110,4 @@ class VoiceKeyModel(nn.Module):
         feature1 = self.fc(feature1)
         feature2 = self.fc(feature2)
 
-        # Normalize the features
-        feature1_normalized = F.normalize(feature1, p=2, dim=1)
-        feature2_normalized = F.normalize(feature2, p=2, dim=1)
-
-        # Compute cosine similarity
-        cosine_sim = F.cosine_similarity(
-            feature1_normalized, feature2_normalized, dim=1
-        )
-
-        return cosine_sim
-
-
-class VoiceKeyModelWithConv(nn.Module):
-    def __init__(self, dim: int = 64, num_heads: int = 8, num_layers: int = 3):
-        super(VoiceKeyModelWithConv, self).__init__()
-
-        # Define 1D convolutional layer for initial feature extraction
-        self.conv_layer = nn.Sequential(
-            nn.Conv1d(1, dim, kernel_size=25, padding=12),
-            nn.BatchNorm1d(dim),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-        )
-
-        # MultiHead Attention layers
-        self.attention_layers = nn.ModuleList(
-            [MultiHeadAttention(dim, num_heads) for _ in range(num_layers)]
-        )
-
-        self.fc = nn.Linear(dim, dim)
-
-    def forward(
-        self, audio_vec1: torch.Tensor, audio_vec2: torch.Tensor
-    ) -> torch.Tensor:
-        # Initial feature extraction using convolutional layer
-        feature1 = self.conv_layer(audio_vec1).transpose(1, 2)[:, ::15, :]
-        feature2 = self.conv_layer(audio_vec2).transpose(1, 2)[:, ::15, :]
-
-        # Pass through multiple attention layers
-        for attention in self.attention_layers:
-            feature1 = attention(feature1)
-            feature2 = attention(feature2)
-
-        # Global average pooling
-        feature1 = torch.mean(feature1, dim=1)
-        feature2 = torch.mean(feature2, dim=1)
-
-        # Pass through a fully connected layer
-        feature1 = self.fc(feature1)
-        feature2 = self.fc(feature2)
-
-        # Normalize the features
-        feature1_normalized = F.normalize(feature1, p=2, dim=1)
-        feature2_normalized = F.normalize(feature2, p=2, dim=1)
-
-        # Compute cosine similarity
-        cosine_sim = F.cosine_similarity(
-            feature1_normalized, feature2_normalized, dim=1
-        )
-
-        return cosine_sim
+        return feature1, feature2

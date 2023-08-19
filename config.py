@@ -25,7 +25,7 @@ def get_parser():
     parser.add_argument("--print_every", type=int, help="Print frequency", default=2)
     parser.add_argument("--num_workers", type=int, help="num_workers", default=24)
     parser.add_argument(
-        "--lr_decay_step", type=int, help="Learning rate decay step", default=20
+        "--lr_decay_step", type=int, help="Learning rate decay step", default=100
     )
     parser.add_argument(
         "--lr_decay_gamma", type=float, help="Learning rate decay factor", default=0.5
