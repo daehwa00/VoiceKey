@@ -5,9 +5,11 @@ import wandb
 from datetime import datetime
 
 from dataloader import PreprocessedEcdcDataLoader
-from model import VoiceKeyModel
+from model import VoiceKeyModel, Quant_VoiceKeyModel
 from utils import set_seed, save_model, evaluate_model
 from config import get_parser
+import copy
+import os
 
 
 def contrastive_loss(embeddings1, embeddings2, labels, margin=1.0):
@@ -97,6 +99,72 @@ def train_model(model, train_loader, test_loader, device, args=None):
     return model
 
 
+def save_torchscript_model(model, model_dir, model_filename):
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    model_filepath = os.path.join(model_dir, model_filename)
+    torch.jit.save(torch.jit.script(model), model_filepath)
+
+
+def load_torchscript_model(model_filepath, device):
+    model = torch.jit.load(model_filepath, map_location=device)
+
+    return model
+
+
+def quantization():
+    cuda_device = torch.device("cuda:0")
+    cpu_device = torch.device("cpu:0")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    args = get_parser().parse_args()
+    batch_size = args.batch_size
+
+    model = Quant_VoiceKeyModel()
+    wandb.init(project="voicekey", entity="daehwa")
+    wandb.watch(model, log="all")
+
+    model.to(cpu_device)
+    fused_model = copy.deepcopy(model)
+    model.eval()
+    fused_model.eval()
+    quantization_config = torch.quantization.get_default_qconfig("fbgemm")
+    fused_model.qconfig = quantization_config
+    fused_model = torch.quantization.fuse_modules(
+    fused_model,
+    [
+        ["conv1", "bn1", "relu1"],
+        ["conv2", "bn2", "relu2"],
+        ["conv3", "bn3", "relu3"]
+    ],
+    inplace=True,
+    )
+
+    print("Training QAT Model...")
+    fused_model.train()
+    torch.quantization.prepare_qat(fused_model, inplace=True)
+
+    train_data_path = "saved_data/preprocessed_train_data.pth"
+    train_loader = PreprocessedEcdcDataLoader(train_data_path, batch_size=batch_size)
+
+    test_data_path = "saved_data/preprocessed_test_data.pth"
+    test_loader = PreprocessedEcdcDataLoader(test_data_path, batch_size=batch_size)
+    set_seed(42)
+
+    
+    train_model(
+        model=fused_model,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        device=cuda_device,
+        args=args,
+    )
+
+    fused_model.to(cpu_device).eval()
+    quantized_model = torch.quantization.convert(fused_model, inplace=True)
+    print(quantized_model)
+    save_torchscript_model(model=quantized_model, model_dir="quant_models", model_filename="quant_128_adamw")
+
+
 def initialize_model(dim, device):
     model = VoiceKeyModel(dim=dim).to(device)
     model.train()
@@ -130,4 +198,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    quantization()
