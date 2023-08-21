@@ -19,7 +19,7 @@ def get_parser():
         "--batch_size",
         type=int,
         help="Batch size",
-        default=4096,
+        default=2048,
     )
     parser.add_argument("--epochs", type=int, help="Number of epochs", default=100)
     parser.add_argument("--print_every", type=int, help="Print frequency", default=2)

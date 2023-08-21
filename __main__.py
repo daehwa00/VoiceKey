@@ -6,31 +6,10 @@ from datetime import datetime
 
 from dataloader import PreprocessedEcdcDataLoader
 from model import VoiceKeyModel, Quant_VoiceKeyModel
-from utils import set_seed, save_model, evaluate_model
+from utils import set_seed, save_model, evaluate_model, contrastive_loss
 from config import get_parser
 import copy
 import os
-
-
-def contrastive_loss(embeddings1, embeddings2, labels, margin=1.0):
-    """
-    Compute the contrastive loss.
-
-    Parameters:
-    - embeddings1, embeddings2: the two sets of embeddings to compare.
-    - labels: labels indicating if the pair is similar (1) or dissimilar (0).
-    - margin: the margin for dissimilar pairs.
-
-    Returns:
-    - loss value
-    """
-    distances = torch.norm(embeddings1 - embeddings2, dim=1)  # Euclidean distances
-    similar_loss = labels * distances**2  # For similar pairs
-    dissimilar_loss = (1 - labels) * torch.relu(
-        margin - distances
-    ) ** 2  # For dissimilar pairs
-
-    return 0.5 * (similar_loss + dissimilar_loss).mean()
 
 
 def train_model(model, train_loader, test_loader, device, args=None):
@@ -130,13 +109,13 @@ def quantization():
     quantization_config = torch.quantization.get_default_qconfig("fbgemm")
     fused_model.qconfig = quantization_config
     fused_model = torch.quantization.fuse_modules(
-    fused_model,
-    [
-        ["conv1", "bn1", "relu1"],
-        ["conv2", "bn2", "relu2"],
-        ["conv3", "bn3", "relu3"]
-    ],
-    inplace=True,
+        fused_model,
+        [
+            ["conv1", "bn1", "relu1"],
+            ["conv2", "bn2", "relu2"],
+            ["conv3", "bn3", "relu3"],
+        ],
+        inplace=True,
     )
 
     print("Training QAT Model...")
@@ -150,7 +129,6 @@ def quantization():
     test_loader = PreprocessedEcdcDataLoader(test_data_path, batch_size=batch_size)
     set_seed(42)
 
-    
     train_model(
         model=fused_model,
         train_loader=train_loader,
@@ -162,7 +140,11 @@ def quantization():
     fused_model.to(cpu_device).eval()
     quantized_model = torch.quantization.convert(fused_model, inplace=True)
     print(quantized_model)
-    save_torchscript_model(model=quantized_model, model_dir="quant_models", model_filename="quant_128_adamw")
+    save_torchscript_model(
+        model=quantized_model,
+        model_dir="quant_models",
+        model_filename="quant_128_adamw",
+    )
 
 
 def initialize_model(dim, device):

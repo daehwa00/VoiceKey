@@ -4,7 +4,7 @@ import numpy as np
 
 import os
 import torch
-import tqdm
+from tqdm import tqdm
 import wandb
 
 
@@ -70,32 +70,55 @@ def evaluate_model(model, test_loader, device):
     model.eval()
     model.to(device)
 
+    margin = 1.5
+
     running_loss = 0.0
     running_accuracy = 0.0
-    progress_bar = tqdm(enumerate(test_loader), total=len(test_loader))
 
-    for i, data in progress_bar:
-        # Get the audios; data is a list of [audios, labels]
-        audios1, audios2, labels = data
-        # Move the audios and the labels to the GPU if available
-        audios1 = audios1.float().squeeze(1).to(device)
-        audios2 = audios2.float().squeeze(1).to(device)
-        labels = labels.to(device)
+    with torch.no_grad():
+        for audios1, audios2, labels in test_loader:
+            audios1 = audios1.float().squeeze(1).to(device)
+            audios2 = audios2.float().squeeze(1).to(device)
+            labels = labels.to(device)
 
-        outputs = model(audios1, audios2)
-        normlized_outputs = (outputs + 1) / 2
+            embeddings1, embeddings2 = model(audios1, audios2)
 
-        loss = torch.mean((normlized_outputs - labels.float()) ** 2)
+            loss = contrastive_loss(embeddings1, embeddings2, labels, margin)
 
-        # Compute the accuracy
-        predict = torch.where(normlized_outputs > 0.5, 1, 0)
-        accuracy = torch.sum(predict == labels).item() / len(labels)
-        wandb.log({"loss": loss.item(), "accuracy": accuracy})
-        # statistics
-        running_loss += loss.item()
-        running_accuracy += accuracy
+            distances = torch.norm(embeddings1 - embeddings2, dim=1)
+            predicts = torch.where(
+                distances < margin / 2,
+                torch.tensor(1.0, device=device),
+                torch.tensor(0.0, device=device),
+            )
 
-    eval_loss = running_loss / len(test_loader.dataset)
-    eval_accuracy = running_accuracy / len(test_loader.dataset)
+            accuracy = (predicts == labels).float().mean().item()
 
-    return eval_loss, eval_accuracy
+            running_loss += loss.item()
+            running_accuracy += accuracy
+
+        eval_loss = running_loss / len(test_loader)
+        eval_accuracy = running_accuracy / len(test_loader)
+
+        return eval_loss, eval_accuracy
+
+
+def contrastive_loss(embeddings1, embeddings2, labels, margin=1.0):
+    """
+    Compute the contrastive loss.
+
+    Parameters:
+    - embeddings1, embeddings2: the two sets of embeddings to compare.
+    - labels: labels indicating if the pair is similar (1) or dissimilar (0).
+    - margin: the margin for dissimilar pairs.
+
+    Returns:
+    - loss value
+    """
+    distances = torch.norm(embeddings1 - embeddings2, dim=1)  # Euclidean distances
+    similar_loss = labels * distances**2  # For similar pairs
+    dissimilar_loss = (1 - labels) * torch.relu(
+        margin - distances
+    ) ** 2  # For dissimilar pairs
+
+    return 0.5 * (similar_loss + dissimilar_loss).mean()
