@@ -1,0 +1,15 @@
+# sweep.yaml 파일
+name: my-sweep
+method: random # 랜덤 검색을 사용합니다.
+metric:
+  goal: maximize # 목표는 지정된 지표를 최대화하는 것입니다.
+  name: accuracy # 최적화할 지표의 이름입니다.
+
+parameters:
+  learning_rate:
+    min: 0.0001
+    max: 0.01
+  margin:
+    values: [1.0, 1.5, 2.0]
+  dropout:
+    values: [0.1, 0.2, 0.3, 0.4, 0.5]

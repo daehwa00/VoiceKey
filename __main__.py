@@ -11,6 +11,13 @@ from config import get_parser
 import copy
 import os
 
+import matplotlib.pyplot as plt
+
+from utils import EarlyStopping
+
+from sklearn.metrics import roc_curve, auc
+from matplotlib import font_manager
+
 
 def train_model(model, train_loader, test_loader, device, args=None):
     model.to(device)
@@ -19,7 +26,9 @@ def train_model(model, train_loader, test_loader, device, args=None):
         optimizer, step_size=args.lr_decay_step, gamma=args.lr_decay_gamma
     )
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    margin = 1.5
+
+    # EarlyStopping 객체 초기화
+    early_stopping = EarlyStopping(patience=7, verbose=True)
 
     for epoch in range(args.epochs):
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader))
@@ -35,27 +44,20 @@ def train_model(model, train_loader, test_loader, device, args=None):
             optimizer.zero_grad()
 
             embeddings1, embeddings2 = model(audios1, audios2)  # -1 ~ 1
-            # normlized_outputs = (outputs + 1) / 2  # 0 ~ 1
-
-            # loss = torch.mean((normlized_outputs - labels.float()) ** 2)
-            # loss = criterion(outputs, labels.float())
-            loss = contrastive_loss(embeddings1, embeddings2, labels, margin)
+            loss = contrastive_loss(embeddings1, embeddings2, labels, args.margin)
             distances = torch.norm(embeddings1 - embeddings2, dim=1)
             predicts = torch.where(
-                distances < margin / 2,
+                distances < args.margin / 2,
                 torch.tensor(1.0, device=device),
                 torch.tensor(0.0, device=device),
             )
             accuracy = (predicts == labels).float().mean().item()
-            # Compute the accuracy
-            # predict = torch.where(normlized_outputs > 0.5, 1, 0)
-            # accuracy = torch.sum(predict == labels).item() / len(labels)
 
             loss.backward()
 
             optimizer.step()
 
-            if i % 4 == 0:
+            if i == 0:
                 wandb.log({"loss": loss.item(), "accuracy": accuracy})
 
         save_model(model, optimizer, epoch, "saved_models", "voicekey", current_time)
@@ -65,16 +67,20 @@ def train_model(model, train_loader, test_loader, device, args=None):
             % (epoch + 1, loss.item(), accuracy * 100)
         )
 
-    # Evaluation
-    model.eval()
-    eval_loss, eval_accuracy = evaluate_model(
-        model=model, test_loader=test_loader, device=device
-    )
-    print(
-        "Epoch: {:02d} Eval Loss: {:.3f} Eval Acc: {:.3f}".format(
-            -1, eval_loss, eval_accuracy
+        # Evaluation
+        model.eval()
+        eval_loss, eval_accuracy = evaluate_model(
+            model=model, test_loader=test_loader, device=device
         )
-    )
+        print(
+            "Epoch: {:02d} Eval Loss: {:.3f} Eval Acc: {:.3f}".format(
+                -1, eval_loss, eval_accuracy
+            )
+        )
+        early_stopping(eval_loss, model)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
     return model
 
 
@@ -147,8 +153,8 @@ def quantization():
     )
 
 
-def initialize_model(dim, device):
-    model = VoiceKeyModel(dim=dim).to(device)
+def initialize_model(dim, device, args):
+    model = VoiceKeyModel(dim=dim, args=args).to(device)
     model.train()
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
@@ -159,14 +165,24 @@ def main():
     args = get_parser().parse_args()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     set_seed(42)
+
+    # WandB – Initialize a new run
+    run = wandb.init()
+    config = run.config
+
     train_loader = PreprocessedEcdcDataLoader(
         args.train_dir, batch_size=args.batch_size
     )
     test_loader = PreprocessedEcdcDataLoader(args.test_dir, batch_size=args.batch_size)
 
     wandb.init(project="voicekey", entity="daehwa")
-    model = initialize_model(dim=args.dim, device=device)
 
+    # initialize hyperparameters
+    args.learning_rate = config.learning_rate
+    args.margin = config.margin
+    args.dropout = config.dropout
+
+    model = initialize_model(dim=args.dim, device=device, args=args)
     # Add the model and optimizer to wandb
     wandb.watch(model, log="all")
 
@@ -179,6 +195,80 @@ def main():
     )
 
 
+def test():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    args = get_parser().parse_args()
+    model = VoiceKeyModel(dim=args.dim, args=args).to(device)
+
+    # Load the checkpoint
+    checkpoint_path = "checkpoint.pt"
+    if os.path.exists(checkpoint_path):
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        print(f"Model loaded from {checkpoint_path}")
+    else:
+        print(f"WARNING: No model found in {checkpoint_path}!")
+        return
+
+    model.eval()
+
+    test_loader = PreprocessedEcdcDataLoader(args.test_dir, batch_size=args.batch_size)
+
+    all_distances = []
+    all_labels = []
+
+    with torch.no_grad():
+        for audios1, audios2, labels in test_loader:
+            audios1 = audios1.float().squeeze(1).to(device)
+            audios2 = audios2.float().squeeze(1).to(device)
+            labels = labels.to(device)
+
+            embeddings1, embeddings2 = model(audios1, audios2)
+
+            distances = torch.norm(embeddings1 - embeddings2, dim=1)
+            all_distances.extend(distances.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    thresholds = [0.1 * i for i in range(16)]
+    plt.figure()
+    lw = 2
+
+    results = []
+
+    for threshold in thresholds:
+        predicts = [1 if d < threshold else 0 for d in all_distances]
+        fpr, tpr, _ = roc_curve(all_labels, predicts)
+        roc_auc = auc(fpr, tpr)
+        plt.plot(
+            fpr,
+            tpr,
+            lw=lw,
+            label=f"ROC curve (Threshold = {threshold}, area = {roc_auc:.2f})",
+        )
+        results.append((threshold, fpr, tpr))
+
+    plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver Operating Characteristic Curve for Various Thresholds")
+    plt.legend(loc="lower right")
+    plt.show()
+
+    # Save the results to a txt file
+    with open("roc_results.txt", "w") as f:
+        for threshold, fpr, tpr in results:
+            f.write(f"Threshold: {threshold}\n")
+            f.write(f"False Positive Rate: {fpr[1]}\n")
+            f.write(f"True Positive Rate: {tpr[1]}\n")
+            f.write("=" * 40 + "\n")
+
+
 if __name__ == "__main__":
     # main()
-    quantization()
+    test()
+
+
+if __name__ == "__main__":
+    # main()
+    test()

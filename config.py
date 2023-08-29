@@ -34,5 +34,7 @@ def get_parser():
         "--learning_rate", type=float, help="Learning rate", default=2e-3
     )
     parser.add_argument("--dim", type=int, help="feature vector dimension", default=128)
+    parser.add_argument("--margin", type=float, help="margin", default=1.5)
+    parser.add_argument("--dropout", type=float, help="dropout", default=0.1)
 
     return parser

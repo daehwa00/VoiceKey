@@ -1,0 +1,64 @@
+Threshold: 0.0
+False Positive Rate: 1.0
+True Positive Rate: 1.0
+========================================
+Threshold: 0.1
+False Positive Rate: 0.0
+True Positive Rate: 0.011990240501917044
+========================================
+Threshold: 0.2
+False Positive Rate: 0.0006310917887946147
+True Positive Rate: 0.02202858138724294
+========================================
+Threshold: 0.30000000000000004
+False Positive Rate: 0.00785358670499965
+True Positive Rate: 0.0685953293830603
+========================================
+Threshold: 0.4
+False Positive Rate: 0.03001192062267723
+True Positive Rate: 0.17385848727779715
+========================================
+Threshold: 0.5
+False Positive Rate: 0.07909683752892505
+True Positive Rate: 0.32108748692924366
+========================================
+Threshold: 0.6000000000000001
+False Positive Rate: 0.15623027838160017
+True Positive Rate: 0.48839316835134194
+========================================
+Threshold: 0.7000000000000001
+False Positive Rate: 0.2626043054484258
+True Positive Rate: 0.6455907981875217
+========================================
+Threshold: 0.8
+False Positive Rate: 0.3844050206857864
+True Positive Rate: 0.7684907633321715
+========================================
+Threshold: 0.9
+False Positive Rate: 0.5100624079657808
+True Positive Rate: 0.8558382711746253
+========================================
+Threshold: 1.0
+False Positive Rate: 0.6188906808779188
+True Positive Rate: 0.9109097246427327
+========================================
+Threshold: 1.1
+False Positive Rate: 0.7157983311128252
+True Positive Rate: 0.9448588358313001
+========================================
+Threshold: 1.2000000000000002
+False Positive Rate: 0.7948951686417502
+True Positive Rate: 0.9661903102126176
+========================================
+Threshold: 1.3
+False Positive Rate: 0.8568122852534885
+True Positive Rate: 0.9811781108400139
+========================================
+Threshold: 1.4000000000000001
+False Positive Rate: 0.9069490218077274
+True Positive Rate: 0.9890554200069711
+========================================
+Threshold: 1.5
+False Positive Rate: 0.9459364700932613
+True Positive Rate: 0.9935169048448937
+========================================

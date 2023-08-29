@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from typing import Type
 import torch.nn.functional as F
 
 
@@ -23,12 +22,12 @@ class Swish(nn.Module):
 
 
 class ChunkedConvolution(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding=0):
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0, args=None):
         super(ChunkedConvolution, self).__init__()
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, padding=padding)
         self.bn = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(args.dropout)
         self.swish = Swish()
 
     def forward(self, chunks):
@@ -68,12 +67,12 @@ class MultiHeadAttention(nn.Module):
 
 
 class VoiceKeyModel(nn.Module):
-    def __init__(self, dim: int = 64, num_heads: int = 8):
+    def __init__(self, dim: int = 64, num_heads: int = 8, args=None):
         super(VoiceKeyModel, self).__init__()
 
-        self.conv1 = ChunkedConvolution(1, dim // 4, kernel_size=26)
-        self.conv2 = ChunkedConvolution(dim // 4, dim // 2, kernel_size=26)
-        self.conv3 = ChunkedConvolution(dim // 2, dim, kernel_size=25)
+        self.conv1 = ChunkedConvolution(1, dim // 4, kernel_size=26, args=args)
+        self.conv2 = ChunkedConvolution(dim // 4, dim // 2, kernel_size=26, args=args)
+        self.conv3 = ChunkedConvolution(dim // 2, dim, kernel_size=25, args=args)
 
         self.attention = MultiHeadAttention(dim, num_heads)
         self.fc = nn.Linear(dim, dim)
@@ -81,7 +80,6 @@ class VoiceKeyModel(nn.Module):
     def forward(
         self, audio_vec1: torch.Tensor, audio_vec2: torch.Tensor
     ) -> torch.Tensor:
-        
         chunks1 = custom_chunking(audio_vec1, 75, 25)
         chunks2 = custom_chunking(audio_vec2, 75, 25)
 
@@ -112,7 +110,7 @@ class VoiceKeyModel(nn.Module):
         feature2 = self.fc(feature2)
 
         return feature1, feature2
-    
+
 
 class Quant_VoiceKeyModel(nn.Module):
     def __init__(self, dim: int = 64, num_heads: int = 8):
@@ -145,7 +143,6 @@ class Quant_VoiceKeyModel(nn.Module):
     def forward(
         self, audio_vec1: torch.Tensor, audio_vec2: torch.Tensor
     ) -> torch.Tensor:
-
         audio_vec1 = self.quant(audio_vec1)
         audio_vec2 = self.quant(audio_vec2)
 
@@ -153,14 +150,26 @@ class Quant_VoiceKeyModel(nn.Module):
         chunks2 = custom_chunking(audio_vec2, 75, 25)
 
         # Extract features using convolutional layers
-        chunks1 = [self.dropout1(self.swish1(self.bn1(self.conv1(chunk)))) for chunk in chunks1]
-        chunks2 = [self.dropout1(self.swish1(self.bn1(self.conv1(chunk)))) for chunk in chunks2]
+        chunks1 = [
+            self.dropout1(self.swish1(self.bn1(self.conv1(chunk)))) for chunk in chunks1
+        ]
+        chunks2 = [
+            self.dropout1(self.swish1(self.bn1(self.conv1(chunk)))) for chunk in chunks2
+        ]
 
-        chunks1 = [self.dropout2(self.swish2(self.bn2(self.conv2(chunk)))) for chunk in chunks1]
-        chunks2 = [self.dropout2(self.swish2(self.bn2(self.conv2(chunk)))) for chunk in chunks2]
+        chunks1 = [
+            self.dropout2(self.swish2(self.bn2(self.conv2(chunk)))) for chunk in chunks1
+        ]
+        chunks2 = [
+            self.dropout2(self.swish2(self.bn2(self.conv2(chunk)))) for chunk in chunks2
+        ]
 
-        chunks1 = [self.dropout3(self.swish3(self.bn3(self.conv3(chunk)))) for chunk in chunks1]
-        chunks2 = [self.dropout3(self.swish3(self.bn3(self.conv3(chunk)))) for chunk in chunks2]
+        chunks1 = [
+            self.dropout3(self.swish3(self.bn3(self.conv3(chunk)))) for chunk in chunks1
+        ]
+        chunks2 = [
+            self.dropout3(self.swish3(self.bn3(self.conv3(chunk)))) for chunk in chunks2
+        ]
 
         # Concatenate the chunks
         feature1 = torch.cat(chunks1, dim=2).transpose(1, 2)
