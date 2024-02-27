@@ -1,6 +1,7 @@
 # VoiceKey: Your Voice, Your Key
 
 ## Overview
+VoiceKey: Real-time Compression Encoding and Quantization for Voice Authentication Model on Edge Devices" at The 4th Korea Artificial Intelligence Conference Code.
 
 VoiceKey is a cutting-edge voice authentication system that uses encoded voice data to verify identity. It leverages the unique characteristics of each individual's voice to provide a secure and convenient method for user authentication.
 
