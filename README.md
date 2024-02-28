@@ -2,6 +2,8 @@
 
 ## Overview
 VoiceKey: Real-time Compression Encoding and Quantization for Voice Authentication Model on Edge Devices" at The 4th Korea Artificial Intelligence Conference Code.
+제 4회 한국인공지능학회 "VoiceKey: 엣지 디바이스의 음성 인증 모델을 위한 실시간 압축 인코딩 및 양자화" 코드입니다.
+
 
 VoiceKey is a cutting-edge voice authentication system that uses encoded voice data to verify identity. It leverages the unique characteristics of each individual's voice to provide a secure and convenient method for user authentication.
 
